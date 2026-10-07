@@ -1,0 +1,6 @@
+step:
+  type_key: decision
+  name: Decision
+  version: 0.9.0
+  author: spec-kit-decision-step contributors
+  description: Typed probabilistic decisions using System One models.

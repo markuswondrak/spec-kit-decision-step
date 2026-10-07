@@ -1,0 +1,81 @@
+schema_version: "1.0"
+
+workflow:
+  id: decision-live
+  name: Decision Backend Live Test
+  version: "1.0.0"
+
+inputs:
+  issue_title:
+    type: string
+    required: true
+
+steps:
+  - id: assess
+    type: decision
+    state:
+      issue:
+        title: "{{ inputs.issue_title }}"
+        source: live-backend-test
+    files:
+      - issue.md
+    questions:
+      category:
+        type: choice
+        instructions: Classify the issue using only the supplied state and issue file.
+        criteria:
+          bug: Existing behavior is incorrect or broken.
+          feature: New functionality is requested.
+          security: The issue plausibly affects security, privacy, or data integrity.
+      impact:
+        type: score
+        instructions: Estimate the impact if this issue remains unresolved.
+        criteria: [low, moderate, high, critical]
+      requires_security_review:
+        type: noul
+        instructions: Does this issue warrant security review before normal triage?
+
+  - id: route-category
+    type: switch
+    expression: "{{ steps.assess.output.category.choice }}"
+    cases:
+      bug:
+        - id: bug-category-route
+          type: shell
+          run: "printf 'CATEGORY_ROUTE=bug\\n'"
+      feature:
+        - id: feature-category-route
+          type: shell
+          run: "printf 'CATEGORY_ROUTE=feature\\n'"
+      security:
+        - id: security-category-route
+          type: shell
+          run: "printf 'CATEGORY_ROUTE=security\\n'"
+    default:
+      - id: unknown-category-route
+        type: shell
+        run: "printf 'CATEGORY_ROUTE=unknown\\n'"
+
+  - id: route-impact
+    type: if
+    condition: "{{ steps.assess.output.impact.score >= 2 }}"
+    then:
+      - id: high-impact-route
+        type: shell
+        run: "printf 'IMPACT_ROUTE=elevated\\n'"
+    else:
+      - id: normal-impact-route
+        type: shell
+        run: "printf 'IMPACT_ROUTE=normal\\n'"
+
+  - id: route-security-review
+    type: if
+    condition: "{{ steps.assess.output.requires_security_review.noul >= 0.5 }}"
+    then:
+      - id: security-review-route
+        type: shell
+        run: "printf 'SECURITY_REVIEW=required\\n'"
+    else:
+      - id: normal-review-route
+        type: shell
+        run: "printf 'SECURITY_REVIEW=not-required\\n'"

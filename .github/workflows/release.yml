@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@v4
+
+      - name: Build the versioned step archive
+        id: package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          archive="decision-${version}.zip"
+          git archive --format=zip --prefix="decision-${version}/" -o "${archive}" HEAD
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+          sha256sum "${archive}"
+
+      - name: Extract release notes from the changelog
+        id: notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes_file="${RUNNER_TEMP}/release-notes.md"
+          awk -v v="${version}" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && (/^## \[/ || /^\[[^]]*\]:/) { exit }
+            found { print }
+          ' CHANGELOG.md > "${notes_file}"
+          if [ ! -s "${notes_file}" ]; then
+            printf 'Release %s\n' "${GITHUB_REF_NAME}" > "${notes_file}"
+          fi
+          echo "notes_file=${notes_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="${{ steps.package.outputs.archive }}"
+          notes_file="${{ steps.notes.outputs.notes_file }}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${archive}" --clobber
+            gh release edit "${GITHUB_REF_NAME}" --notes-file "${notes_file}"
+          else
+            gh release create "${GITHUB_REF_NAME}" "${archive}" \
+              --title "${GITHUB_REF_NAME}" \
+              --notes-file "${notes_file}" \
+              --verify-tag
+          fi

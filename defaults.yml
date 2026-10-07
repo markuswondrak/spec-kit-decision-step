@@ -1,0 +1,6 @@
+backend:
+  adapter: jev
+  base_url: https://api.typesafe.ai
+  api_key_env: TYPESAFE_API_KEY
+  model_id: jev-latest
+  timeout: 30
